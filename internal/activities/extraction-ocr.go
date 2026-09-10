@@ -4,28 +4,22 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"image"
-	"net/http"
+	"io"
 	"path"
 	"time"
 	"uuid"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/h2non/bimg"
 	"github.com/marcopiovanello/easypeasyocr/internal/domain"
 	"github.com/marcopiovanello/easypeasyocr/pkg/utils"
 	"go.temporal.io/sdk/activity"
-
-	"image/jpeg"
-	_ "image/jpeg"
-	_ "image/png"
 )
 
 type OCRExtractionActivity struct {
-	S3Client            *s3.Client
-	BucketName          string
-	EmbeddingServiceURL string
-	HTTPClient          *http.Client
+	S3Client   *s3.Client
+	BucketName string
 }
 
 func NewOCRExtractionActivity(S3Client *s3.Client, BucketName string) *OCRExtractionActivity {
@@ -45,17 +39,19 @@ func (a *OCRExtractionActivity) ConvertAndUpload(ctx context.Context, doc domain
 	}
 	defer obj.Body.Close()
 
-	// TODO: passiamo da libvips
-	img, _, err := image.Decode(obj.Body)
+	imgBytes, err := io.ReadAll(obj.Body)
 	if err != nil {
 		return domain.ConvertResult{}, err
 	}
 
-	buff := &bytes.Buffer{}
-
-	jpeg.Encode(buff, utils.ToGrayscale(img), &jpeg.Options{
-		Quality: 90,
+	processedImageBytes, err := bimg.NewImage(imgBytes).Process(bimg.Options{
+		Width:          2480,
+		Interpolator:   bimg.Bicubic,
+		Interpretation: bimg.InterpretationBW,
 	})
+	if err != nil {
+		return domain.ConvertResult{}, err
+	}
 
 	var (
 		filename  = fmt.Sprintf("%s-%s.%s", doc.DocumentID, uuid.NewV4().String(), "jpg")
@@ -63,6 +59,7 @@ func (a *OCRExtractionActivity) ConvertAndUpload(ctx context.Context, doc domain
 	)
 
 	uploadedObj, err := a.S3Client.PutObject(ctx, &s3.PutObjectInput{
+		Body:   bytes.NewReader(processedImageBytes),
 		Bucket: aws.String(a.BucketName),
 		Key:    &uploadKey,
 	})

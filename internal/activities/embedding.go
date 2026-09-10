@@ -5,39 +5,60 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/bytedance/sonic"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/marcopiovanello/easypeasyocr/internal/domain"
+	llamautils "github.com/marcopiovanello/easypeasyocr/pkg/llama_utils"
 	"github.com/pgvector/pgvector-go"
 	"go.temporal.io/sdk/temporal"
 )
 
-type EmbeddingActiviy struct {
-	db                  *pgxpool.Pool
-	httplient           *http.Client
-	embeddingServiceURL string
+type EmbeddingServiceOpts struct {
+	URL    string
+	ApiKey string
+	Model  string
 }
 
-func NewEmbeddingActivity(db *pgxpool.Pool, httpClient *http.Client, embeddingServiceURL string) *EmbeddingActiviy {
+type EmbeddingActiviy struct {
+	db                     *pgxpool.Pool
+	httplient              *http.Client
+	embeddingModel         string
+	embeddingServiceURL    string
+	embeddingServiceApiKey string
+}
+
+func NewEmbeddingActivity(
+	db *pgxpool.Pool,
+	httpClient *http.Client,
+	embeddingOpts *EmbeddingServiceOpts,
+) *EmbeddingActiviy {
 	return &EmbeddingActiviy{
-		db:                  db,
-		httplient:           httpClient,
-		embeddingServiceURL: embeddingServiceURL,
+		db:                     db,
+		httplient:              httpClient,
+		embeddingModel:         embeddingOpts.Model,
+		embeddingServiceURL:    embeddingOpts.URL,
+		embeddingServiceApiKey: embeddingOpts.ApiKey,
 	}
 }
 
 func (a *EmbeddingActiviy) EmbedText(ctx context.Context, ocr domain.OCRResult) (domain.EmbedResult, error) {
-	body, _ := sonic.Marshal(map[string]any{
-		"inputs": ocr.Text,
-	})
+	body, err := sonic.Marshal(llamautils.NewEmbeddingRequestPreInstructed(
+		a.embeddingModel,
+		ocr.Text,
+	))
+	if err != nil {
+		return domain.EmbedResult{}, err
+	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", a.embeddingServiceURL+"/embed", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", a.embeddingServiceURL, bytes.NewReader(body))
 	if err != nil {
 		return domain.EmbedResult{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", a.embeddingServiceApiKey))
 
 	resp, err := a.httplient.Do(req)
 	if err != nil {

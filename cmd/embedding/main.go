@@ -19,6 +19,8 @@ var (
 	temporalServerAddr  = os.Getenv("TEMPORAL_ADDR")
 	temporalNamespace   = os.Getenv("TEMPORAL_NAMESPACE")
 	taskQueueLen        = os.Getenv("TASK_QUEUE_LEN")
+	llamaCppApiKey      = os.Getenv("LLAMA_CPP_API_KEY")
+	embeddingModel      = os.Getenv("EMBEDDING_MODEL")
 )
 
 func main() {
@@ -54,7 +56,11 @@ func main() {
 		log.Fatalln("failed connecting to postgresql", err.Error())
 	}
 
-	act := activities.NewEmbeddingActivity(pool, http.DefaultClient, embeddingServiceURL)
+	act := activities.NewEmbeddingActivity(pool, http.DefaultClient, &activities.EmbeddingServiceOpts{
+		URL:    embeddingServiceURL,
+		ApiKey: llamaCppApiKey,
+		Model:  embeddingModel,
+	})
 
 	w.RegisterActivity(act.EmbedText)
 	w.RegisterActivity(act.PersistToPgvector)
