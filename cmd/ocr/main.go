@@ -25,10 +25,11 @@ var (
 func main() {
 	queueLen, err := strconv.Atoi(taskQueueLen)
 	if err != nil {
-		log.Println("defaulting to task queue lenght: 1")
+		log.Println("defaulting to task queue lenght: 3")
+		queueLen = 0
 	}
 	if queueLen <= 0 {
-		queueLen = 1
+		queueLen = 3
 	}
 
 	w, stop, err := utils.NewTemporalWorker(utils.TemporalWorkerOpts{

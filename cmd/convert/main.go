@@ -26,7 +26,7 @@ func main() {
 	queueLen, err := strconv.Atoi(taskQueueLen)
 	if err != nil {
 		log.Println("defaulting to task queue lenght: 4")
-		queueLen = 4
+		queueLen = 0
 	}
 	if queueLen <= 0 {
 		queueLen = 4

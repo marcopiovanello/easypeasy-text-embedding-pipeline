@@ -1,3 +1,4 @@
 .env
 launch-llama.cpp.sh
 docker-compose.dev.yml
+benchmark.sh

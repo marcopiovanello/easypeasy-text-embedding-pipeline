@@ -10,7 +10,7 @@ func RunTesseract(r io.Reader) (string, error) {
 	client := gosseract.NewClient()
 
 	client.SetLanguage("ita", "eng")
-	client.SetPageSegMode(gosseract.PSM_SPARSE_TEXT)
+	client.SetPageSegMode(gosseract.PSM_AUTO)
 	client.SetVariable("load_system_dawg", "0")
 	client.SetVariable("load_freq_dawg", "0")
 	client.SetVariable("load_punc_dawg", "0")

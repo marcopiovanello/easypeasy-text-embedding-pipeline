@@ -6,3 +6,5 @@ create table if not exists documents (
     text text,
     embedding vector(1024)
 );
+
+create index on documents USING hnsw (embedding vector_cosine_ops);
