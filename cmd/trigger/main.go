@@ -51,8 +51,9 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-
 	mux.HandleFunc("PUT /upload", steamFileAndRunWorkflow(temporalClient, s3Client))
+
+	log.Println("started trigger web server at 0.0.0.0:8080")
 
 	http.ListenAndServe(":8080", mux)
 }
@@ -109,6 +110,7 @@ func steamFileAndRunWorkflow(temporalClient client.Client, s3Client *s3.Client) 
 			client.StartWorkflowOptions{
 				ID:                    workflowId,
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+				TaskQueue:             domain.TaskQueueMain,
 			},
 			workflow.ExtractionWorkflow,
 			domain.DocumentInput{

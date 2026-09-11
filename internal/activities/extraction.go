@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
+	"image/color"
 	"path"
 	"time"
 	"uuid"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/h2non/bimg"
+	"github.com/disintegration/gift"
+	"github.com/disintegration/imaging"
 	"github.com/marcopiovanello/easypeasyocr/internal/domain"
 	"github.com/marcopiovanello/easypeasyocr/pkg/utils"
 	"go.temporal.io/sdk/activity"
@@ -39,27 +40,34 @@ func (a *OCRExtractionActivity) ConvertAndUpload(ctx context.Context, doc domain
 	}
 	defer obj.Body.Close()
 
-	imgBytes, err := io.ReadAll(obj.Body)
+	src, err := imaging.Decode(obj.Body)
 	if err != nil {
 		return domain.ConvertResult{}, err
 	}
 
-	processedImageBytes, err := bimg.NewImage(imgBytes).Process(bimg.Options{
-		Width:          2480,
-		Interpolator:   bimg.Bicubic,
-		Interpretation: bimg.InterpretationBW,
-	})
+	g := gift.New(
+		gift.Resize(src.Bounds().Dx()*2, src.Bounds().Dy()*2, gift.CubicResampling),
+		gift.Grayscale(),
+		gift.Threshold(60.0),
+	)
+
+	dst := imaging.New(g.Bounds(src.Bounds()).Dx(), g.Bounds(src.Bounds()).Dy(), color.White)
+	g.Draw(dst, src)
+
+	var imgbuf bytes.Buffer
+
+	err = imaging.Encode(&imgbuf, dst, imaging.PNG)
 	if err != nil {
 		return domain.ConvertResult{}, err
 	}
 
 	var (
-		filename  = fmt.Sprintf("%s-%s.%s", doc.DocumentID, uuid.NewV4().String(), "jpg")
+		filename  = fmt.Sprintf("%s-%s.%s", doc.DocumentID, uuid.NewV4().String(), "png")
 		uploadKey = path.Join(path.Dir(doc.S3Key), filename)
 	)
 
 	uploadedObj, err := a.S3Client.PutObject(ctx, &s3.PutObjectInput{
-		Body:   bytes.NewReader(processedImageBytes),
+		Body:   &imgbuf,
 		Bucket: aws.String(a.BucketName),
 		Key:    &uploadKey,
 	})
@@ -69,7 +77,7 @@ func (a *OCRExtractionActivity) ConvertAndUpload(ctx context.Context, doc domain
 
 	return domain.ConvertResult{
 		Checksum:    *uploadedObj.ChecksumCRC32,
-		S3KeyBitmap: filename,
+		S3KeyBitmap: uploadKey,
 	}, nil
 }
 

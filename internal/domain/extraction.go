@@ -27,4 +27,5 @@ const (
 	TaskQueueConvert = "cpu-convert"
 	TaskQueueOCR     = "cpu-ocr"
 	TaskQueueEmbed   = "gpu-embed"
+	TaskQueueMain    = "extraction"
 )

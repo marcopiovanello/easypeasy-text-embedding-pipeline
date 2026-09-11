@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/marcopiovanello/easypeasyocr/internal/activities"
+	"github.com/marcopiovanello/easypeasyocr/internal/domain"
 	"github.com/marcopiovanello/easypeasyocr/pkg/utils"
 	"go.temporal.io/sdk/worker"
 )
@@ -24,7 +25,7 @@ var (
 func main() {
 	queueLen, err := strconv.Atoi(taskQueueLen)
 	if err != nil {
-		log.Fatalln(err)
+		log.Println("defaulting to task queue lenght: 1")
 	}
 	if queueLen <= 0 {
 		queueLen = 1
@@ -33,6 +34,7 @@ func main() {
 	w, stop, err := utils.NewTemporalWorker(utils.TemporalWorkerOpts{
 		Address:            temporalServerAddr,
 		Namespace:          temporalNamespace,
+		TaskQueue:          domain.TaskQueueOCR,
 		MaxConcurrentTasks: queueLen,
 	})
 	defer stop()

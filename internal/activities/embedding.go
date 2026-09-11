@@ -3,10 +3,10 @@ package activities
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -45,10 +45,7 @@ func NewEmbeddingActivity(
 }
 
 func (a *EmbeddingActiviy) EmbedText(ctx context.Context, ocr domain.OCRResult) (domain.EmbedResult, error) {
-	body, err := sonic.Marshal(llamautils.NewEmbeddingRequestPreInstructed(
-		a.embeddingModel,
-		ocr.Text,
-	))
+	body, err := sonic.Marshal(llamautils.NewEmbeddingRequest(ocr.Text))
 	if err != nil {
 		return domain.EmbedResult{}, err
 	}
@@ -70,24 +67,37 @@ func (a *EmbeddingActiviy) EmbedText(ctx context.Context, ocr domain.OCRResult) 
 		return domain.EmbedResult{}, errors.New("embedding service overloaded")
 	}
 
-	var vectors [][]float32
-	if err := json.NewDecoder(resp.Body).Decode(&vectors); err != nil {
+	var results llamautils.OpenAIEmbedVector
+
+	if err := sonic.ConfigStd.NewDecoder(resp.Body).Decode(&results); err != nil {
 		return domain.EmbedResult{}, temporal.NewNonRetryableApplicationError(
-			"invalid response from embedding service", "DecodeError", err)
+			"invalid response from embedding service",
+			"DecodeError",
+			err,
+		)
 	}
 
-	return domain.EmbedResult{Vector: vectors[0]}, nil
+	return domain.EmbedResult{Vector: results[0].Embedding[0]}, nil
 }
 
-func (a *EmbeddingActiviy) PersistToPgvector(ctx context.Context, documentID string, text string, vector []float32) error {
+func (a *EmbeddingActiviy) PersistToPgvector(ctx context.Context, documentId string, text string, vector []float32) error {
+	conn, err := a.db.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	queryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	embedding := pgvector.NewVector(vector)
 
-	_, err := a.db.Exec(ctx, `
-		INSERT INTO document_extraction_embeddings (document_id, text, embedding)
+	_, err = conn.Exec(queryCtx, `
+		INSERT INTO documents (document_id, text, embedding)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (document_id) DO UPDATE
 		SET text = EXCLUDED.text, embedding = EXCLUDED.embedding
-	`, documentID, text, embedding)
+	`, documentId, text, embedding)
 
 	return err
 }

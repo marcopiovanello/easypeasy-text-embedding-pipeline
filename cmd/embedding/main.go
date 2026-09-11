@@ -5,11 +5,15 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/marcopiovanello/easypeasyocr/internal/activities"
+	"github.com/marcopiovanello/easypeasyocr/internal/domain"
 	"github.com/marcopiovanello/easypeasyocr/pkg/utils"
+	pgxvec "github.com/pgvector/pgvector-go/pgx"
 	"go.temporal.io/sdk/worker"
 )
 
@@ -26,15 +30,27 @@ var (
 func main() {
 	queueLen, err := strconv.Atoi(taskQueueLen)
 	if err != nil {
-		log.Fatalln(err)
+		log.Println("defaulting to task queue lenght: 8")
 	}
 	if queueLen <= 0 {
 		queueLen = 8
 	}
 
-	w, stop, err := utils.NewTemporalWorker(utils.TemporalWorkerOpts{
+	wEmbed, stop, err := utils.NewTemporalWorker(utils.TemporalWorkerOpts{
 		Address:            temporalServerAddr,
 		Namespace:          temporalNamespace,
+		TaskQueue:          domain.TaskQueueEmbed,
+		MaxConcurrentTasks: queueLen,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer stop()
+
+	wDB, stop, err := utils.NewTemporalWorker(utils.TemporalWorkerOpts{
+		Address:            temporalServerAddr,
+		Namespace:          temporalNamespace,
+		TaskQueue:          domain.TaskQueueDB,
 		MaxConcurrentTasks: queueLen,
 	})
 	if err != nil {
@@ -45,6 +61,10 @@ func main() {
 	pgConfig, err := pgxpool.ParseConfig(postgresURL)
 	if err != nil {
 		log.Fatalln("failed parsing database datasource", postgresURL, err.Error())
+	}
+
+	pgConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		return pgxvec.RegisterTypes(ctx, conn)
 	}
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), pgConfig)
@@ -62,10 +82,14 @@ func main() {
 		Model:  embeddingModel,
 	})
 
-	w.RegisterActivity(act.EmbedText)
-	w.RegisterActivity(act.PersistToPgvector)
+	log.Println(llamaCppApiKey, embeddingServiceURL)
 
-	if err := w.Run(worker.InterruptCh()); err != nil {
-		log.Fatalln("unable to start worker", err)
-	}
+	wEmbed.RegisterActivity(act.EmbedText)
+	wDB.RegisterActivity(act.PersistToPgvector)
+
+	go wEmbed.Run(worker.InterruptCh())
+	go wDB.Run(worker.InterruptCh())
+
+	cmdCtx, _ := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	<-cmdCtx.Done()
 }

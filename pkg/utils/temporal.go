@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"github.com/marcopiovanello/easypeasyocr/internal/domain"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 )
@@ -9,6 +8,7 @@ import (
 type TemporalWorkerOpts struct {
 	Address            string
 	Namespace          string
+	TaskQueue          string
 	MaxConcurrentTasks int
 }
 
@@ -21,7 +21,7 @@ func NewTemporalWorker(opts TemporalWorkerOpts) (worker.Worker, func(), error) {
 		return nil, nil, err
 	}
 
-	w := worker.New(c, domain.TaskQueueConvert, worker.Options{
+	w := worker.New(c, opts.TaskQueue, worker.Options{
 		MaxConcurrentActivityExecutionSize: opts.MaxConcurrentTasks,
 	})
 
