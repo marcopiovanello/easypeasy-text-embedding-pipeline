@@ -1,3 +1,8 @@
 # Text embedding pipeline in Temporal.io
 
+Extract text from an image with Tesseract OCR and get the embeddings to store in pgvector.
+Temporal ensures durable execution and task queuing.
+
 <img width="1765" height="982" alt="Senza titolo-2026-09-10-1741" src="https://github.com/user-attachments/assets/a8830aa7-b8c3-4c86-a152-41fb5d1bb5f9" />
+
+1000 ACCESSI CONCORRENTI
