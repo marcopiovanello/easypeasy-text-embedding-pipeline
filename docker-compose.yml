@@ -1,0 +1,90 @@
+services:
+  web-upload:
+    image: registry.kokonatsu.cc/epocr-upload-service:latest
+    restart: unless-stopped
+    ports:
+      - 8080:8080
+    netwokrs:
+      - ocrdemo_net
+    envirnonment:
+      S3_REGION: "${S3_REGION}"
+      S3_BUCKET: "${S3_BUCKET}"
+      S3_HOST: "${S3_HOST}"
+      S3_AKID: "${S3_AKID}"
+      S3_SKID: "${S3_SKID}"
+      TEMPORAL_ADDR: "${TEMPORAL_ADDR}"
+      TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE}"
+
+  workflow-trigger:
+    image: registry.kokonatsu.cc/epocr-workflow-trigger:latest
+    restart: unless-stopped
+    netwokrs:
+      - ocrdemo_net
+    envirnonment:
+      TEMPORAL_ADDR: "${TEMPORAL_ADDR}"
+      TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE}"
+
+  img-conversion-worker:
+    image: registry.kokonatsu.cc/epocr-convert-worker:latest
+    restart: unless-stopped
+    netwokrs:
+      - ocrdemo_net
+    envirnonment:
+      S3_REGION: "${S3_REGION}"
+      S3_BUCKET: "${S3_BUCKET}"
+      S3_HOST: "${S3_HOST}"
+      S3_AKID: "${S3_AKID}"
+      S3_SKID: "${S3_SKID}"
+      TEMPORAL_ADDR: "${TEMPORAL_ADDR}"
+      TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE}"
+      TASK_QUEUE_LEN: ${IMG_CONVERSION_WORKER_TASK_LEN}
+      
+  ocr-worker:
+    image: registry.kokonatsu.cc/epocr-ocr-worker:latest
+    restart: unless-stopped
+    netwokrs:
+      - ocrdemo_net
+    envirnonment:
+      S3_REGION: "${S3_REGION}"
+      S3_BUCKET: "${S3_BUCKET}"
+      S3_HOST: "${S3_HOST}"
+      S3_AKID: "${S3_AKID}"
+      S3_SKID: "${S3_SKID}"
+      TEMPORAL_ADDR: "${TEMPORAL_ADDR}"
+      TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE}"
+      TASK_QUEUE_LEN: ${OCR_WORKER_TASK_LEN}
+
+  embedding-worker:
+    image: registry.kokonatsu.cc/epocr-embedding-worker:latest
+    restart: unless-stopped
+    netwokrs:
+      - ocrdemo_net
+    envirnonment:
+      POSTGRES_URL: "${POSTGRES_URL}"
+      TEMPORAL_ADDR: "${TEMPORAL_ADDR}"
+      TEMPORAL_NAMESPACE: "${TEMPORAL_NAMESPACE}"
+      TASK_QUEUE_LEN: ${EMBEDDING_WORKER_TASK_LEN}
+      LLAMA_CPP_API_KEY: ${LLAMA_CPP_API_KEY}
+      EMBEDDING_SERVICE_URL: ${EMBEDDING_SERVICE_URL}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_pgvector
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    netwokrs:
+      - ocrdemo_net
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/init-db.sql
+
+volumes:
+  pgdata: {}
+
+networks:
+  ocrdemo_net:
+    external: true
